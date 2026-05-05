@@ -4,11 +4,18 @@
   "description": "",
   "license": "ISC",
   "author": "",
-  "type": "commonjs",
+  "type": "module",
+  "bin": {
+    "weather": "./build/index.js"
+  },
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc && chmod +x build/index.js"
   },
+  "files": [
+    "build"
+  ],
+  "keywords": [],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^4.4.3"
