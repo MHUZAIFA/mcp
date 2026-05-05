@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
+import http from "http";
 
 const NWS_API_BASE = "https://api.weather.gov";
 const USER_AGENT = "weather-app/1.0";
@@ -216,12 +218,59 @@ server.tool(
 );
 
 async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Weather MCP Server running on stdio");
+  const mode = process.argv[2]; // pass "sse" or leave blank for stdio
+
+  if (mode === "sse") {
+    const transports: Record<string, SSEServerTransport> = {};
+
+    const httpServer = http.createServer(async (req, res) => {
+      // SSE endpoint — client connects here
+      if (req.method === "GET" && req.url === "/sse") {
+        const transport = new SSEServerTransport("/messages", res);
+        transports[transport.sessionId] = transport;
+
+        res.on("close", () => {
+          delete transports[transport.sessionId];
+        });
+
+        await server.connect(transport);
+
+      // Message endpoint — client posts tool calls here
+      } else if (req.method === "POST" && req.url?.startsWith("/messages")) {
+        const sessionId = new URL(req.url, "http://localhost").searchParams.get("sessionId");
+        const transport = sessionId ? transports[sessionId] : null;
+
+        if (!transport) {
+          res.writeHead(404).end("Session not found");
+          return;
+        }
+
+        let body = "";
+        req.on("data", chunk => body += chunk);
+        req.on("end", async () => {
+          await transport.handlePostMessage(req, res, JSON.parse(body));
+        });
+
+      } else {
+        res.writeHead(404).end("Not found");
+      }
+    });
+
+    const PORT = process.env.PORT || 3000;
+    httpServer.listen(PORT, () => {
+      console.error(`Weather MCP Server running on SSE at http://localhost:${PORT}`);
+    });
+
+  } else {
+    // Default: stdio (keeps Claude Desktop working)
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error("Weather MCP Server running on stdio");
+  }
 }
 
 main().catch((error) => {
   console.error("Fatal error in main():", error);
   process.exit(1);
 });
+// node build/index.js sse
