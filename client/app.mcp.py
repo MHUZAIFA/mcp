@@ -3,10 +3,37 @@ from mcp import ClientSession
 from mcp.client.sse import sse_client
 from groq import Groq
 import traceback
+import os
+
+
+def load_local_env() -> None:
+    env_path = os.path.join(os.path.dirname(__file__), ".env.local")
+    if not os.path.exists(env_path):
+        return
+
+    with open(env_path, "r", encoding="utf-8") as env_file:
+        for raw_line in env_file:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
 
 app = Flask(__name__)
 MCP_SERVER_URL = "http://localhost:3000/sse"
-groq_client = Groq(api_key="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")
+
+
+load_local_env()
+
+groq_api_key = os.environ.get("GROQ_API_KEY")
+if not groq_api_key:
+    raise RuntimeError("GROQ_API_KEY is not set. Add it to client/.env.local or your environment.")
+
+groq_client = Groq(api_key=groq_api_key)
 
 
 async def ask_mcp(prompt: str) -> str:
